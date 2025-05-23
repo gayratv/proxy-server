@@ -1,0 +1,84 @@
+# конфигурация для разработки с hot reload и дополнительными инструментами
+version: '3.8'
+
+services:
+  # Redis для разработки с персистентностью
+  redis:
+    image: redis:7-alpine
+    container_name: proxy-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: >
+      redis-server 
+      --appendonly yes 
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - proxy-dev-network
+
+  # Redis Commander для визуального управления Redis
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: proxy-redis-commander
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - proxy-dev-network
+
+  # Bull Dashboard для мониторинга очереди
+  bull-dashboard:
+    image: deadly0/bull-board
+    container_name: proxy-bull-dashboard-dev
+    ports:
+      - "3001:3000"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+    depends_on:
+      - redis
+    networks:
+      - proxy-dev-network
+
+  # Приложение в dev режиме с hot reload
+  app-dev:
+    build:
+      context: ..
+      dockerfile: Dockerfile.dev
+    container_name: proxy-server-dev
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Порт для отладки
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./nodemon.json:/app/nodemon.json
+      - ./.env:/app/.env
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=debug
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: npm run dev
+    networks:
+      - proxy-dev-network
+
+networks:
+  proxy-dev-network:
+    driver: bridge

@@ -1,0 +1,56 @@
+# базовая конфигурация с Redis и Bull Dashboard
+version: '3.8'
+
+services:
+  # Redis для очереди и кеширования
+  redis:
+    image: redis:7-alpine
+    container_name: proxy-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Bull Dashboard для мониторинга очереди (опционально)
+  bull-dashboard:
+    image: deadly0/bull-board
+    container_name: proxy-bull-dashboard
+    ports:
+      - "3001:3000"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Прокси-сервер (для production)
+  # proxy-server:
+  #   build: .
+  #   container_name: proxy-server
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - REDIS_URL=redis://redis:6379
+  #     - TARGET_URL=https://srvchat.com
+  #     - LOG_LEVEL=info
+  #   depends_on:
+  #     - redis
+  #   restart: unless-stopped
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  default:
+    name: proxy-network

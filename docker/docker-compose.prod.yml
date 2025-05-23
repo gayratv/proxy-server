@@ -1,0 +1,135 @@
+# production конфигурация с:
+#
+#  Nginx для load balancing
+#  Prometheus для метрик
+#  Grafana для визуализации
+#  Масштабирование и health checks
+version: '3.8'
+
+services:
+  # Redis кластер для высокой доступности
+  redis-master:
+    image: redis:7-alpine
+    container_name: proxy-redis-master
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-strongpassword}
+    volumes:
+      - redis-master-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-strongpassword}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - proxy-prod-network
+
+  # Прокси-сервер (несколько реплик)
+  proxy-server:
+    image: proxy-queue-server:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    ports:
+      - "3000-3001:3000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-strongpassword}@redis-master:6379
+      - TARGET_URL=${TARGET_URL:-https://srvchat.com}
+      - LOG_LEVEL=info
+      - RATE_LIMIT_MIN_TIME=500
+      - QUEUE_MAX_SIZE=5000
+      - JOB_TIMEOUT=120000
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: always
+    networks:
+      - proxy-prod-network
+
+  # Nginx как reverse proxy и load balancer
+  nginx:
+    image: nginx:alpine
+    container_name: proxy-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - proxy-server
+    restart: always
+    networks:
+      - proxy-prod-network
+
+  # Prometheus для метрик
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: proxy-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    restart: always
+    networks:
+      - proxy-prod-network
+
+  # Grafana для визуализации
+  grafana:
+    image: grafana/grafana:latest
+    container_name: proxy-grafana
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3002:3000"
+    restart: always
+    networks:
+      - proxy-prod-network
+
+volumes:
+  redis-master-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  proxy-prod-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

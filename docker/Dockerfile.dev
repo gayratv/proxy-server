@@ -1,0 +1,24 @@
+# Development Dockerfile с hot reload
+FROM node:18-alpine
+
+# Установка необходимых инструментов
+RUN apk add --no-cache python3 make g++ git
+
+# Рабочая директория
+WORKDIR /app
+
+# Копируем package files
+COPY package*.json ./
+
+# Установка зависимостей (включая dev)
+RUN npm install
+
+# Копируем конфигурационные файлы
+COPY tsconfig.json ./
+COPY nodemon.json ./
+
+# Порты
+EXPOSE 3000 9229
+
+# Запуск в dev режиме
+CMD ["npm", "run", "dev"]
