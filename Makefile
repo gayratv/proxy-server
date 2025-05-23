@@ -4,23 +4,22 @@
 
 # Переменные
 DOCKER_DIR = docker
-DOCKER_COMPOSE = docker-compose -f $(DOCKER_DIR)/docker-compose.yml
-DOCKER_COMPOSE_DEV = $(DOCKER_COMPOSE) -f $(DOCKER_DIR)/docker-compose.dev.yml
-DOCKER_COMPOSE_PROD = $(DOCKER_COMPOSE) -f $(DOCKER_DIR)/docker-compose.prod.yml
+DOCKER_COMPOSE_DEV = docker-compose -f $(DOCKER_DIR)/docker-compose.dev.yml
+DOCKER_COMPOSE_PROD = docker-compose -f $(DOCKER_DIR)/docker-compose.prod.yml
 
 # Помощь
 help:
 	@echo "Доступные команды:"
-	@echo "  make dev         - Запуск в режиме разработки"
-	@echo "  make prod        - Запуск в production режиме"
-	@echo "  make build       - Сборка Docker образов"
-	@echo "  make up          - Запуск контейнеров"
+	@echo "  make dev         - Запуск в режиме разработки (Redis, Bull Dashboard, App)"
+	@echo "  make prod        - Запуск в production режиме (Redis, Nginx, Monitoring)"
 	@echo "  make down        - Остановка контейнеров"
 	@echo "  make logs        - Просмотр логов"
 	@echo "  make clean       - Очистка данных и образов"
 	@echo "  make test        - Запуск тестов"
 	@echo "  make redis-cli   - Подключение к Redis CLI"
 	@echo "  make shell       - Открыть shell в контейнере приложения"
+	@echo "  make list-files  - Создать список файлов проекта"
+	@echo "  make check-structure - Проверить структуру проекта"
 
 # Разработка
 dev: dev-down dev-up
@@ -62,22 +61,19 @@ prod-logs:
 
 # Общие команды
 build:
-	$(DOCKER_COMPOSE) build
+	$(DOCKER_COMPOSE_DEV) build
 
-up:
-	$(DOCKER_COMPOSE) up -d redis bull-dashboard
-	@echo "🚀 Базовые сервисы запущены"
-	@echo "📍 Redis: localhost:6379"
-	@echo "📊 Bull Dashboard: http://localhost:3001"
+up: dev
+	@echo "Используйте 'make dev' для разработки или 'make prod' для production"
 
 down:
-	$(DOCKER_COMPOSE) down
+	$(DOCKER_COMPOSE_DEV) down || $(DOCKER_COMPOSE_PROD) down
 
 logs:
-	$(DOCKER_COMPOSE) logs -f
+	$(DOCKER_COMPOSE_DEV) logs -f || $(DOCKER_COMPOSE_PROD) logs -f
 
 ps:
-	$(DOCKER_COMPOSE) ps
+	$(DOCKER_COMPOSE_DEV) ps || $(DOCKER_COMPOSE_PROD) ps
 
 # Утилиты
 redis-cli:
@@ -123,3 +119,40 @@ redis-restore:
 	docker cp $(shell ls -t backups/dump-*.rdb | head -1) proxy-redis:/data/dump.rdb
 	docker restart proxy-redis
 	@echo "✅ Redis восстановлен"
+
+# Утилиты проекта
+list-files:
+	@if [ -f scripts/list-project-files.sh ]; then \
+		chmod +x scripts/list-project-files.sh && ./scripts/list-project-files.sh; \
+	elif command -v node >/dev/null 2>&1 && [ -f list-files-simple.js ]; then \
+		node list-files-simple.js; \
+	else \
+		echo "📋 Создание списка файлов..."; \
+		find . -type f -not -path "./node_modules/*" -not -path "./dist/*" -not -path "./.git/*" | sort > project-files-list.txt; \
+		echo "✅ Создан файл project-files-list.txt"; \
+	fi
+
+check-structure:
+	@echo "🔍 Проверка структуры проекта..."
+	@echo "================================"
+	@echo ""
+	@echo "Основные файлы:"
+	@for file in package.json tsconfig.json Makefile README.md .env.example; do \
+		if [ -f $file ]; then \
+			echo "✅ $file"; \
+		else \
+			echo "❌ $file (отсутствует)"; \
+		fi \
+	done
+	@echo ""
+	@echo "Директории:"
+	@for dir in src docker tests scripts; do \
+		if [ -d $dir ]; then \
+			echo "✅ $dir/"; \
+		else \
+			echo "❌ $dir/ (отсутствует)"; \
+		fi \
+	done
+	@echo ""
+	@echo "TypeScript файлы: $(find src -name "*.ts" 2>/dev/null | wc -l)"
+	@echo "Docker файлы: $(find docker -type f 2>/dev/null | wc -l)"

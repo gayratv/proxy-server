@@ -4,9 +4,8 @@
 
 ```
 docker/
-├── docker-compose.yml           # Базовая конфигурация
-├── docker-compose.dev.yml       # Дополнения для разработки
-├── docker-compose.prod.yml      # Production конфигурация
+├── docker-compose.dev.yml       # Полная конфигурация для разработки
+├── docker-compose.prod.yml      # Полная конфигурация для production
 ├── Dockerfile                   # Production образ
 ├── Dockerfile.dev              # Development образ
 ├── nginx/
@@ -22,16 +21,6 @@ docker/
 
 Все команды выполняются из **корневой директории проекта** (не из директории docker).
 
-### Базовая настройка (только Redis)
-
-```bash
-# Из корня проекта
-make up
-
-# Или напрямую
-docker-compose -f docker/docker-compose.yml up -d
-```
-
 ### Режим разработки (с hot reload)
 
 ```bash
@@ -39,7 +28,7 @@ docker-compose -f docker/docker-compose.yml up -d
 make dev
 
 # Или напрямую
-docker-compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
+docker-compose -f docker/docker-compose.dev.yml up -d
 ```
 
 ### Production режим
@@ -50,7 +39,7 @@ make prod
 
 # Или пошагово
 docker build -t proxy-queue-server:latest -f docker/Dockerfile .
-docker-compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
+docker-compose -f docker/docker-compose.prod.yml up -d
 ```
 
 ## Доступные сервисы
@@ -165,8 +154,8 @@ scrape_configs:
 
 1. Создайте директорию `docker/nginx/ssl/`
 2. Поместите туда сертификаты:
-    - `cert.pem` - сертификат
-    - `key.pem` - приватный ключ
+   - `cert.pem` - сертификат
+   - `key.pem` - приватный ключ
 3. Раскомментируйте HTTPS секцию в `docker/nginx/nginx.conf`
 
 ### Масштабирование
