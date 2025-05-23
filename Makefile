@@ -3,9 +3,10 @@
 .PHONY: help dev prod build up down logs clean test
 
 # Переменные
-DOCKER_COMPOSE = docker-compose
-DOCKER_COMPOSE_DEV = $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml
-DOCKER_COMPOSE_PROD = $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml
+DOCKER_DIR = docker
+DOCKER_COMPOSE = docker-compose -f $(DOCKER_DIR)/docker-compose.yml
+DOCKER_COMPOSE_DEV = $(DOCKER_COMPOSE) -f $(DOCKER_DIR)/docker-compose.dev.yml
+DOCKER_COMPOSE_PROD = $(DOCKER_COMPOSE) -f $(DOCKER_DIR)/docker-compose.prod.yml
 
 # Помощь
 help:
@@ -44,7 +45,7 @@ dev-build:
 prod: prod-build prod-up
 
 prod-build:
-	docker build -t proxy-queue-server:latest .
+	docker build -t proxy-queue-server:latest -f $(DOCKER_DIR)/Dockerfile .
 
 prod-up:
 	$(DOCKER_COMPOSE_PROD) up -d
